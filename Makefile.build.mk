@@ -83,6 +83,19 @@ multinode-console:
 		node:${NODE_VERSION} \
 	  /bin/bash -c "npm ci && npm run build"
 
+.PHONY: satellite-web
+satellite-web:
+	# build web assets
+	rm -rf web/satellite/dist
+	# install npm dependencies and build the binaries
+	docker run --rm -i \
+		--mount type=bind,src="${PWD}",dst=/go/src/storj.io/storj \
+		-w /go/src/storj.io/storj/web/satellite \
+		-e HOME=/tmp \
+		-u $(shell id -u):$(shell id -g) \
+		node:${NODE_VERSION} \
+	  /bin/bash -c "npm ci && npm run build"
+
 .PHONY: satellite-admin-ui
 satellite-admin-ui:
 	# install npm dependencies for being embedded by Go embed.
@@ -239,8 +252,13 @@ binary:
         -product-version "$(shell git describe --tags --exact-match --match "v[0-9]*\.[0-9]*\.[0-9]*" | awk -F'-' 'BEGIN {v=0} {v=$$1} END {print v}' || echo "dev" )" \
         -special-build "$(shell git describe --tags --exact-match --match "v[0-9]*\.[0-9]*\.[0-9]*" | awk -F'-' 'BEGIN {v=0} {v=$$2} END {print v}' )" \
 	resources/versioninfo.json || echo "goversioninfo is not installed, metadata will not be created"
+	@if [ "${GOOS}" = "darwin" ]; then \
+		CGO_FLAG="0"; \
+	else \
+		CGO_FLAG="1"; \
+	fi; \
 	docker run --rm -i -v "${PWD}":/go/src/storj.io/storj -e GO111MODULE=on \
-	-e GOOS=${GOOS} -e GOARCH=${GOARCH} -e GOARM=6 -e CGO_ENABLED=1 \
+	-e GOOS=${GOOS} -e GOARCH=${GOARCH} -e GOARM=6 -e CGO_ENABLED=$$CGO_FLAG \
 	-v /tmp/go-cache:/tmp/.cache/go-build -v /tmp/go-pkg:/go/pkg \
 	-w /go/src/storj.io/storj -e GOPROXY -u $(shell id -u):$(shell id -g) storjlabs/golang:${GO_VERSION} \
 	scripts/release.sh build $(EXTRA_ARGS) -o release/${TAG}/$(COMPONENT)_${GOOS}_${GOARCH}${FILEEXT} \
